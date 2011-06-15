@@ -67,7 +67,7 @@ class Model extends \lithium\data\Model {
 		if($recursive){
 			return ($node->data($right) - 1 - $node->data($left)) / 2;
 		}else{
-			$count = $self::find('count',array('conditions'=>array($left => array ('>'=>$node->data($left)), $right => array('<' => $node->data($right)), $parent => $node->data($parent))));
+			$count = $self::find('count',array('conditions'=>array($left => array ('>'=>$node->data($left)), $right => array('<' => $node->data($right)), $parent => $node->data($self::meta('key')))));
 			return $count;
 		}
     }
