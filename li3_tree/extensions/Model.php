@@ -35,13 +35,13 @@ class Model extends \lithium\data\Model {
 		
 		static::applyFilter('save', function($self,$params,$chain){
         	if($self::beforeSave($self,$params)){
-	        	$chain->next($self,$params,$chain);
+	        	return $chain->next($self,$params,$chain);
         	}
         });
         
         static::applyFilter('delete', function($self,$params,$chain){
         	if($self::beforeDelete($self,$params)){
-	        	$chain->next($self,$params,$chain);
+	        	return $chain->next($self,$params,$chain);
         	}
         });
 	}
