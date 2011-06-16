@@ -146,6 +146,12 @@ class Model extends \lithium\data\Model {
 			if($entity->data($parent) == $entity->data($self::meta('key'))){
 				return false;
 			}
+			
+			$oldNode = static::getById($self, $entity->data($self::meta('key')));
+			if($oldNode->data($parent)==$entity->data($parent)){
+				return true;
+			}
+			
 			static::updateNode($self, $entity);
 		}
     	return true;
