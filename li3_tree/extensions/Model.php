@@ -4,6 +4,14 @@ namespace li3_tree\extensions;
 /**
  * Basic Model for a Tree Behaviour in li3
  * 
+ * Implements a full Nested Tree Set Behaviour for li3. Provide at least a table with an PK, left, right and parent integer fields
+ * to use this model. Its not recommended to name DB Colums 'left' and 'right' as these are reserved sql words. Apply the Behaviour in
+ * your Models __init() Method.
+ * 
+ * If you want to use this model with jsTree (www.jstree.com) configure 'jstree' to true. This enables you to directly use the 
+ * new position given by the script without changing the value. (jstree calculates the target position with the fact that the old node
+ * remains in tree) 
+ * 
  * @author: vogan
  */
 class Model extends \lithium\data\Model {
@@ -13,7 +21,7 @@ class Model extends \lithium\data\Model {
 	 * @var Array
 	 */
 	protected static $_tree_defaults = array(
-		'parent' => 'parent', 'left' => 'lft', 'right' => 'rght', 'recursive' => false
+		'parent' => 'parent', 'left' => 'lft', 'right' => 'rght', 'recursive' => false, 'jstree' => false
 	);
 	
 	/**
@@ -22,16 +30,16 @@ class Model extends \lithium\data\Model {
 	 */
 	protected static $_tree_config = array();
 	
+	
 	/**
-	 * init
+	 * applyBehavior
 	 * 
-	 * init Tree Callback Methods
+	 * Applies Behaviour to the Model and configures its use
+	 * 
+	 * @param \lithium\data\Model $self The Model using this behaviour
 	 */
-	public static function __init() {
-		parent::__init();
-		
-		$class = get_called_class();
-		static::$_tree_config[$class] = array_merge(static::$_tree_defaults, static::$_tree_config);
+	public static function applyBehavior($self, $config = array()) {
+		static::$_tree_config[$self] = array_merge(static::$_tree_defaults, $config);
 		
 		static::applyFilter('save', function($self,$params,$chain){
         	if($self::beforeSave($self,$params)){
@@ -119,6 +127,52 @@ class Model extends \lithium\data\Model {
 		return $path;
     }
 	
+    /**
+     * move
+     * 
+     * performs move operations of an entity in tree
+     * 
+     * @param Integer id the id of the node to move
+     * @param Integer position new position of node in same level, starting with 0
+     * @param Integer newParent id of new parent (provide old parent id if no change)
+     */
+    public static function move($id, $newPosition, $newParent = null){
+    	$self = get_called_class();
+    	extract(static::$_tree_config[$self]);
+    	
+    	$entity = $self::find('first',array('conditions'=>array($self::meta('key')=>$id)));
+    	
+    	// -- correct the level -> parent
+    	if($newParent !== null && $newParent != $entity->data($parent)){
+    		$entity->set(array($parent=>$newParent));
+    		$entity->save();
+    	}
+    	
+    	// -- reordering
+    	$childrenCount = static::countChildren($entity->data($parent), false);
+    	$position = static::getPosition($self, $id, $childrenCount);
+    	if($position !== false){    		
+    		if($jstree){
+    			if($position < $newPosition){
+    				$newPosition--;
+    			}
+    		}
+			
+    		$count = $newPosition - $position;
+    		if($count < 0){
+    			$count *= -1;
+    		}
+    		
+    		for($i=0;$i<$count;$i++){
+	    		if($position < $newPosition){
+    				static::moveDown($self, $entity);
+    			}else{
+    				static::moveUp($self, $entity);
+    			}
+    		}
+    	}
+    }
+    
 	/**
      * beforeSave
      * 
@@ -217,22 +271,20 @@ class Model extends \lithium\data\Model {
 		
 		$rangeX = array('floor'=>$entity->data($left),'ceiling'=>$entity->data($right));
 		$shiftX = 0;
+		$shiftY = $span + 1;
 					
 		static::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
 		if($entity->data($right) < $newParent->data($right)){
 			$rangeY = array('floor'=>$entity->data($right)+1,'ceiling'=>$newParent->data($right)-1);
-			$shiftY = $span + 1;
 			static::updateNodesIndicesBetween($self, $rangeY, '-', $shiftY);
 			$shiftX = $newParent->data($right) - $entity->data($right) -1;
 		}else{
 			$rangeY = array('floor'=>$newParent->data($right),'ceiling'=>$entity->data($left)-1);
-			$shiftY = ($newParent->data($left) - $entity->data($left) + 1) * -1;
 			static::updateNodesIndicesBetween($self, $rangeY, '+', $shiftY);
-			$shiftX = $newParent->data($left) - $entity->data($left) + 1;
+			$shiftX = ($newParent->data($right)-1) - $entity->data($left) + 1;
 		}
 		static::updateNodesIndicesBetween($self, array('floor'=> (0 - $span),'ceiling'=> 0), '+',$spanToZero+$shiftX);
 		$entity->set(array($left=>$entity->data($left)+$shiftX, $right=>$entity->data($right)+$shiftX));
-
 	}
 	
 	/**
@@ -301,6 +353,59 @@ class Model extends \lithium\data\Model {
 	}
 	
 	/**
+	 * move down
+	 * 
+	 * moves an element down in order
+	 * 
+	 * @param \lithium\data\Model $self the model using this behavior
+	 * @param \lithium\data\Entity $node the node to move down;
+	 */
+	private static function moveDown($self,$node){
+		extract(static::$_tree_config[$self]);
+		$next = $self::find('first',array('conditions'=>array($parent => $node->data($parent),$left => $node->data($right)+1)));
+		if($next != null){
+			
+			$spanToZero = $node->data($right);
+			$rangeX = array('floor'=>$node->data($left),'ceiling'=>$node->data($right));
+			$shiftX = ($next->data($right) - $next->data($left)) + 1;
+			$rangeY = array('floor'=>$next->data($left),'ceiling'=>$next->data($right));
+			$shiftY = ($node->data($right) - $node->data($left)) + 1;
+						
+			static::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
+			static::updateNodesIndicesBetween($self, $rangeY, '-', $shiftY);
+			static::updateNodesIndicesBetween($self, array('floor'=> (0 - $shiftY),'ceiling'=> 0), '+',$spanToZero+$shiftX);
+			
+			$node->set(array($left=>$node->data($left)+$shiftX, $right=>$node->data($right)+$shiftX));
+		}
+	}
+	
+	/**
+	 * moveUp
+	 * 
+	 * moves an element up in order
+	 * 
+	 * @param \lithium\data\Model $self the model using this behavior
+	 * @param \lithium\data\Entity $node the node to move down;
+	 */
+	private static function moveUp($self,$node){
+		extract(static::$_tree_config[$self]);
+		$prev = $self::find('first',array('conditions'=>array($parent => $node->data($parent),$right => $node->data($left)-1)));
+		if($prev != null){
+			$spanToZero = $node->data($right);
+			$rangeX = array('floor'=>$node->data($left),'ceiling'=>$node->data($right));
+			$shiftX = ($prev->data($right) - $prev->data($left)) + 1;
+			$rangeY = array('floor'=>$prev->data($left),'ceiling'=>$prev->data($right));
+			$shiftY = ($node->data($right) - $node->data($left)) + 1;
+						
+			static::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
+			static::updateNodesIndicesBetween($self, $rangeY, '+', $shiftY);
+			static::updateNodesIndicesBetween($self, array('floor'=> (0 - $shiftY),'ceiling'=> 0), '+',$spanToZero-$shiftX);
+			
+			$node->set(array($left=>$node->data($left)-$shiftX, $right=>$node->data($right)-$shiftX));
+		}
+	}
+	
+	/**
 	 * getMax
 	 * 
 	 * returns the highest 'right' - Index in Table
@@ -316,6 +421,46 @@ class Model extends \lithium\data\Model {
 		}
 		return 0;
 	}
+	
+	/**
+	 * getPosition
+	 * 
+	 * returns the current position number of an element at the same level, where 0 is first position
+	 * 
+	 * @param \lithium\data\Model $self the model using this behavior
+	 * @param Integer $id the id of the node the get the position from
+	 * @param Integer $childrenCount number of Children of $id's parent (performance parameter to avoid double select ;))
+	 */
+	private static function getPosition($self,$id,$childrenCount = false){
+		extract(static::$_tree_config[$self]);
+		
+		$node = static::getById($self, $id);
+		$parentNode = static::getById($self, $node->data($parent));
+		
+		//fast decisions based on nested set maths
+		if($node->data($left) == ($parentNode->data($left)+1)){
+			return 0;
+		}
+		
+		if(($node->data($right) + 1) == $parentNode->data($right)){
+			if($childrenCount === false){
+				$childrenCount = static::countChildren($node->data($parent),false);
+			}
+			return $childrenCount - 1;
+		}
+		
+		//still here? now the shit hits the fan...
+		$count = 0;
+		$children = static::getChildren($node->data($parent),false);
+		
+		foreach($children as $child){
+			if($child->data($self::meta('key'))==$id){
+				return $count;
+			}
+			$count++;
+		}
+		
+		return false;
+	}
 }
-
 ?>
