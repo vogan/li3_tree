@@ -35,13 +35,13 @@ class Model extends \lithium\data\Model {
 		static::$_tree_config[$class] = array_merge(static::$_tree_defaults, static::$_tree_config);
 
 		static::applyFilter('save', function($self, $params, $chain) {
-			if ($self::beforeSave($self, $params)) {
+			if ($self::_beforeSave($self, $params)) {
 				$chain->next($self, $params, $chain);
 			}
 		});
 
 		static::applyFilter('delete', function($self, $params, $chain) {
-			if ($self::beforeDelete($self, $params)) {
+			if ($self::_beforeDelete($self, $params)) {
 				$chain->next($self, $params, $chain);
 			}
 		});
@@ -68,7 +68,13 @@ class Model extends \lithium\data\Model {
 		if ($recursive) {
 			return ($node->data($right) - 1 - $node->data($left)) / 2;
 		} else {
-			$count = $self::find('count', array('conditions' => array($left => array('>' => $node->data($left)), $right => array('<' => $node->data($right)), $parent => $node->data($parent))));
+			$count = $self::find('count', array(
+				'conditions' => array(
+					$left => array('>' => $node->data($left)),
+					$right => array('<' => $node->data($right)),
+					$parent => $node->data($parent)
+				)
+			));
 			return $count;
 		}
 	}
@@ -130,7 +136,7 @@ class Model extends \lithium\data\Model {
 	}
 
 	/**
-	 * beforeSave
+	 * _beforeSave
 	 *
 	 * this method is called befor each save
 	 *
@@ -160,7 +166,7 @@ class Model extends \lithium\data\Model {
 	}
 
 	/**
-	 * beforeDelete
+	 * _beforeDelete
 	 *
 	 * this method is called befor each save
 	 *
@@ -186,12 +192,10 @@ class Model extends \lithium\data\Model {
 		if ($parentNode) {
 			$r = $parentNode->data($right);
 			static::updateNodesIndices($self, $r);
-			$entity->set(
-			array(
+			$entity->set(array(
 				$left => $r,
 				$right => $r + 1
-			)
-			);
+			));
 		}
 	}
 
@@ -250,7 +254,9 @@ class Model extends \lithium\data\Model {
 		if ($entity->data($right) - $entity->data($left) != 1) {
 			$span = $entity->data($right) - $entity->data($left);
 			$connection = $self::connection();
-			$connection->read('delete from ' . $self::meta('source') . ' where ' . $parent . '=' . $entity->data($self::meta('key')), array('return' => 'resource'));
+			$sql = 'DELETE FROM ' . $self::meta('source') .' ';
+			$sql .= 'WHERE ' . $parent . ' = ' . $entity->data($self::meta('key'));
+			$connection->read($sql, array('return' => 'resource'));
 		}
 		static::updateNodesIndices($self, $entity->data($right), '-', $span + 1);
 	}
@@ -277,11 +283,17 @@ class Model extends \lithium\data\Model {
 	 * @param String $dir Direction +/- (defaults to +)
 	 * @param Integer $span value to be added/subtracted (defaults to 2)
 	 */
-	private static function updateNodesIndices($self, $rght, $dir='+', $span=2) {
+	private static function updateNodesIndices($self, $rght, $dir = '+', $span=2) {
 		extract(static::$_tree_config[$self]);
 		$connection = $self::connection();
-		$connection->read('update ' . $self::meta('source') . ' set ' . $right . '=' . $right . $dir . $span . ' where ' . $right . ' >= ' . $rght, array('return' => 'resource'));
-		$connection->read('update ' . $self::meta('source') . ' set ' . $left . '=' . $left . $dir . $span . ' where ' . $left . ' > ' . $rght, array('return' => 'resource'));
+
+		$sql = 'UPDATE ' . $self::meta('source') . ' set ' . $right . ' = ' . $right . $dir . $span . ' ';
+		$sql .= 'WHERE ' . $right . ' >= ' . $rght;
+		$connection->read($sql, array('return' => 'resource'));
+
+		$sql = 'UPDATE ' . $self::meta('source') . ' set ' . $left . ' = ' . $left . $dir . $span . ' ';
+		$sql .= 'WHERE ' . $left . ' > ' . $rght;
+		$connection->read($sql, array('return' => 'resource'));
 	}
 
 	/**
@@ -294,11 +306,17 @@ class Model extends \lithium\data\Model {
 	 * @param String $dir Direction +/- (defaults to +)
 	 * @param Integer $span value to be added/subtracted (defaults to 2)
 	 */
-	private static function updateNodesIndicesBetween($self, $range, $dir='+', $span=2) {
+	private static function updateNodesIndicesBetween($self, $range, $dir = '+', $span=2) {
 		extract(static::$_tree_config[$self]);
 		$connection = $self::connection();
-		$connection->read('update ' . $self::meta('source') . ' set ' . $right . '=' . $right . $dir . $span . ' where ' . $right . ' between ' . $range['floor'] . ' and ' . $range['ceiling'], array('return' => 'resource'));
-		$connection->read('update ' . $self::meta('source') . ' set ' . $left . '=' . $left . $dir . $span . ' where ' . $left . ' between ' . ($range['floor']) . ' and ' . $range['ceiling'], array('return' => 'resource'));
+
+		$sql = 'UPDATE ' . $self::meta('source') . ' set ' . $right . '=' . $right . $dir . $span . ' ';
+		$sql .= 'WHERE ' . $right . ' between ' . $range['floor'] . ' and ' . $range['ceiling'];
+		$connection->read($sql, array('return' => 'resource'));
+
+		$sql = 'UPDATE ' . $self::meta('source') . ' set ' . $left . ' = ' . $left . $dir . $span . ' ';
+		$sql .= 'WHERE ' . $left . ' between ' . ($range['floor']) . ' and ' . $range['ceiling'];
+		$connection->read($sql, array('return' => 'resource'));
 	}
 
 	/**
@@ -311,7 +329,9 @@ class Model extends \lithium\data\Model {
 	private static function getMax($self) {
 		extract(static::$_tree_config[$self]);
 		$connection = $self::connection();
-		$max = $connection->read('select max(' . $right . ') as max from ' . $self::meta('source') . ';');
+		$sql = 'SELECT max(' . $right . ') as max ';
+		$sql .= 'FROM ' . $self::meta('source') . ';';
+		$max = $connection->read($sql);
 		if (sizeof($max) == 1) {
 			return $max[0]['max'];
 		}
