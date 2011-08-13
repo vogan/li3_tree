@@ -42,13 +42,13 @@ class Model extends \lithium\data\Model {
 		static::$_tree_config[$self] = array_merge(static::$_tree_defaults, $config);
 
 		static::applyFilter('save', function($self, $params, $chain) {
-			if ($self::_beforeSave($self, $params)) {
+			if ($self::beforeSave($self, $params)) {
 				return $chain->next($self, $params, $chain);
 			}
 		});
 
 		static::applyFilter('delete', function($self, $params, $chain) {
-			if ($self::_beforeDelete($self, $params)) {
+			if ($self::beforeDelete($self, $params)) {
 				return $chain->next($self, $params, $chain);
 			}
 		});
@@ -154,15 +154,15 @@ class Model extends \lithium\data\Model {
 	public static function move($id, $newPosition, $newParent = null){
 		$self = get_called_class();
 		extract(static::$_tree_config[$self]);
-		 
-		$entity = $self::find('first',array('conditions'=>array($self::meta('key')=>$id)));
-		 
+
+		$entity = $self::find('first', array('conditions' => array($self::meta('key') => $id)));
+
 		// -- correct the level -> parent
 		if($newParent !== null && $newParent != $entity->data($parent)){
 			$entity->set(array($parent=>$newParent));
 			$entity->save();
 		}
-		 
+
 		// -- reordering
 		$childrenCount = static::countChildren($entity->data($parent), false);
 		$position = static::getPosition($self, $id, $childrenCount);
@@ -172,7 +172,7 @@ class Model extends \lithium\data\Model {
 					$newPosition--;
 				}
 			}
-				
+
 			$count = $newPosition - $position;
 			if($count < 0){
 				$count *= -1;
@@ -189,14 +189,15 @@ class Model extends \lithium\data\Model {
 	}
 
 	/**
-	 * _beforeSave
+	 * beforeSave
 	 *
 	 * this method is called befor each save
 	 *
 	 * @param \lithium\data\Model $self
 	 * @param Array $params
+	 * @access public
 	 */
-	private static function _beforeSave($self, $params) {
+	public static function beforeSave($self, $params) {
 		extract(static::$_tree_config[$self]);
 		$entity = $params['entity'];
 		if (!$entity->data('id')) {
@@ -213,26 +214,27 @@ class Model extends \lithium\data\Model {
 			if ($entity->data($parent) == $entity->data($self::meta('key'))) {
 				return false;
 			}
-				
+
 			$oldNode = static::getById($self, $entity->data($self::meta('key')));
 			if($oldNode->data($parent)==$entity->data($parent)){
 				return true;
 			}
-				
+
 			static::updateNode($self, $entity);
 		}
 		return true;
 	}
 
 	/**
-	 * _beforeDelete
+	 * beforeDelete
 	 *
 	 * this method is called befor each save
 	 *
 	 * @param \lithium\data\Model $self
 	 * @param Array $params
+	 * @access public
 	 */
-	private static function _beforeDelete($self, $params) {
+	public static function beforeDelete($self, $params) {
 		static::deleteFromTree($self, $params['entity']);
 		return true;
 	}
@@ -283,7 +285,7 @@ class Model extends \lithium\data\Model {
 		$rangeX = array('floor' => $entity->data($left), 'ceiling' => $entity->data($right));
 		$shiftX = 0;
 		$shiftY = $span + 1;
-			
+
 		static::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
 		if($entity->data($right) < $newParent->data($right)){
 			$rangeY = array('floor' => $entity->data($right) + 1,'ceiling' => $newParent->data($right) - 1);
@@ -389,7 +391,7 @@ class Model extends \lithium\data\Model {
 		extract(static::$_tree_config[$self]);
 		$next = $self::find('first',array('conditions'=>array($parent => $node->data($parent),$left => $node->data($right)+1)));
 		if($next != null){
-				
+
 			$spanToZero = $node->data($right);
 			$rangeX = array('floor'=>$node->data($left),'ceiling'=>$node->data($right));
 			$shiftX = ($next->data($right) - $next->data($left)) + 1;
@@ -399,7 +401,7 @@ class Model extends \lithium\data\Model {
 			static::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
 			static::updateNodesIndicesBetween($self, $rangeY, '-', $shiftY);
 			static::updateNodesIndicesBetween($self, array('floor'=> (0 - $shiftY),'ceiling'=> 0), '+',$spanToZero+$shiftX);
-				
+
 			$node->set(array($left=>$node->data($left)+$shiftX, $right=>$node->data($right)+$shiftX));
 		}
 	}
@@ -425,7 +427,7 @@ class Model extends \lithium\data\Model {
 			static::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
 			static::updateNodesIndicesBetween($self, $rangeY, '+', $shiftY);
 			static::updateNodesIndicesBetween($self, array('floor'=> (0 - $shiftY),'ceiling'=> 0), '+',$spanToZero-$shiftX);
-				
+
 			$node->set(array($left=>$node->data($left)-$shiftX, $right=>$node->data($right)-$shiftX));
 		}
 	}
