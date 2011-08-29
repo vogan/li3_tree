@@ -5,17 +5,12 @@ namespace li3_tree\extensions\data\behavior;
 use lithium\data\Connections;
 
 /**
- * Basic Model for a Tree Behaviour in li3
+ * Basic Tree Behaviour in li3
  *
  * Implements a full Nested Tree Set Behaviour for li3. Provide at least a table with an PK, left, right and parent integer fields
- * to use this model. Its not recommended to name DB Colums 'left' and 'right' as these are reserved sql words. Apply the Behaviour in
- * your Models __init() Method.
+ * to use this model. Its not recommended to name DB Colums 'left' and 'right' as these are reserved sql words.
  *
- * If you want to use this model with jsTree (www.jstree.com) configure 'jstree' to true. This enables you to directly use the
- * new position given by the script without changing the value. (jstree calculates the target position with the fact that the old node
- * remains in tree)
- *
- * @author: vogan
+ * @author: vogan, agborkowski
  */
 class Tree extends \lithium\core\StaticObject {
 
@@ -42,7 +37,11 @@ class Tree extends \lithium\core\StaticObject {
 
 		//set updated filter
 			$class::applyFilter('save', function($self, $params, $chain) use ($class) {
-				$params = Tree::invokeMethod('_beforeSave', array($class, $params));
+				if ($params['data']) {
+					$params['entity']->set($params['data']);
+					$params['data'] = array();
+				}
+				Tree::invokeMethod('_beforeSave', array($class, $params));
 				return $chain->next($self, $params, $chain);
 			});
 
@@ -54,44 +53,6 @@ class Tree extends \lithium\core\StaticObject {
 
 		return static::$_configurations[$class] = $config;
 	}
-///**
-//	 * Formatiert die Datenstruktur für den Update
-//	 *
-//	 * @param string|object $class
-//	 * @param array $options
-//	 */
-//	protected static function _formatUpdated($class, $options) {
-//		$config = static::$_configurations[$class];
-//		$config = $config['updated'];
-//
-//		$entity = $options['entity'];
-//		
-//		//only if Entity exists
-//		if($entity->exists()) {
-//			$datetime = date($config['format']);
-//			$options['data'][$config['field']] = $datetime;
-//		}
-//
-//		return $options;
-//	}
-
-	/**
-	 * Formatiert die Datenstruktur für Created
-	 *
-	 * @param string|object $class
-	 * @param array $options
-	 */
-//	protected static function _formatCreated($class, $options) {
-//		$staticConfig = static::$_configurations[$class];
-//		$config = $staticConfig['created'];
-//		$time = time();
-//		$datetime = date($config['format'],$time);
-//		$options['data'][$config['field']] = $datetime;
-//		$config = $staticConfig['updated'];
-//		$datetime = date($config['format'],$time);
-//		$options['data'][$config['field']] = $datetime;
-//		return $options;
-//	}
 
 	/**
 	 * countChildren
@@ -104,13 +65,13 @@ class Tree extends \lithium\core\StaticObject {
 	 */
 	public static function countChildren($id, $rec = null) {
 		$self = get_called_class();
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 
 		if ($rec !== null) {
 			$recursive = $rec;
 		}
 
-		$node = static::getById($self, $id);
+		$node = self::getById($self, $id);
 		if ($recursive) {
 			return ($node->data($right) - 1 - $node->data($left)) / 2;
 		} else {
@@ -135,14 +96,14 @@ class Tree extends \lithium\core\StaticObject {
 	 */
 	public static function getChildren($id, $rec = null) {
 		$self = get_called_class();
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 
 		if ($rec !== null) {
 			$recursive = $rec;
 		}
 
 		if ($recursive) {
-			$node = static::getById($self, $id);
+			$node = self::getById($self, $id);
 			return $self::find('all', array(
 				'conditions' => array(
 					$left => array('>' => $node->data($left)),
@@ -168,13 +129,13 @@ class Tree extends \lithium\core\StaticObject {
 	 */
 	public static function getPath($id) {
 		$self = get_called_class();
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 
 		$path = array();
-		$element = static::getById($self, $id);
+		$element = self::getById($self, $id);
 		while ($element->data($parent) != null) {
 			$path[] = $element;
-			$element = static::getById($self, $element->data($parent));
+			$element = self::getById($self, $element->data($parent));
 		}
 		$path[] = $element;
 		$path = array_reverse($path);
@@ -192,7 +153,7 @@ class Tree extends \lithium\core\StaticObject {
 	 */
 	public static function move($id, $newPosition, $newParent = null){
 		$self = get_called_class();
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 
 		$entity = $self::find('first', array('conditions' => array($self::meta('key') => $id)));
 
@@ -203,8 +164,8 @@ class Tree extends \lithium\core\StaticObject {
 		}
 
 		// -- reordering
-		$childrenCount = static::countChildren($entity->data($parent), false);
-		$position = static::getPosition($self, $id, $childrenCount);
+		$childrenCount = self::countChildren($entity->data($parent), false);
+		$position = self::getPosition($self, $id, $childrenCount);
 		if($position !== false){
 			if($jstree){
 				if($position < $newPosition){
@@ -219,9 +180,9 @@ class Tree extends \lithium\core\StaticObject {
 
 			for($i=0;$i<$count;$i++){
 				if($position < $newPosition){
-					static::moveDown($self, $entity);
+					self::moveDown($self, $entity);
 				}else{
-					static::moveUp($self, $entity);
+					self::moveUp($self, $entity);
 				}
 			}
 		}
@@ -234,34 +195,34 @@ class Tree extends \lithium\core\StaticObject {
 	 *
 	 * @param \lithium\data\Model $self
 	 * @param Array $params
-	 * @access public
+	 * @access protected
 	 */
 	protected static function _beforeSave($self, $params) {
-		extract(static::$_configurations[$class]);
+		extract(static::$_configurations[$self]);
 		$entity = $params['entity'];
-		if (!$entity['id']) {
-			if ($entity[$parent]) {
-				static::insertParent($self, $entity);
+		if (!$entity->data('id')) {
+			if ($entity->data($parent)) {
+				self::insertParent($self, $entity);
 			} else {
-				$max = static::getMax($self);
-				$entity = array(
+				$max = self::getMax($self);
+				$entity->set(array(
 					$left => $max + 1,
 					$right => $max + 2
-				);
+				));
 			}
-		} elseif ($entity[$parent]) {
-			if ($entity[$parent] == $entity[$self::meta('key')]) {
+		} elseif ($entity->data($parent)) {
+			if ($entity->data($parent) == $entity->data($self::meta('key'))) {
 				return false;
 			}
 
-			$oldNode = static::getById($self, $entity[$self::meta('key')]);
-			if($oldNode->data($parent)==$entity->data($parent)){
+			$oldNode = self::getById($self, $entity->data($self::meta('key')));
+			if($oldNode->data($parent) == $entity->data($parent)){
 				return true;
 			}
 
-			static::updateNode($self, $entity);
+			self::updateNode($self, $entity);
 		}
-		return true;
+		return array();
 	}
 
 	/**
@@ -271,10 +232,10 @@ class Tree extends \lithium\core\StaticObject {
 	 *
 	 * @param \lithium\data\Model $self
 	 * @param Array $params
-	 * @access public
+	 * @access protected
 	 */
 	protected static function _beforeDelete($self, $params) {
-		static::deleteFromTree($self, $params['entity']);
+		self::deleteFromTree($self, $params['entity']);
 		return true;
 	}
 
@@ -287,11 +248,11 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param \lithium\data\Entity $entity
 	 */
 	private static function insertParent($self, $entity) {
-		extract(static::$_tree_config[$self]);
-		$parentNode = static::getById($self, $entity[$parent]);
+		extract(static::$_configurations[$self]);
+		$parentNode = self::getById($self, $entity->data($parent));
 		if ($parentNode) {
 			$r = $parentNode->data($right);
-			static::updateNodesIndices($self, $r);
+			self::updateNodesIndices($self, $r);
 			$entity->set(array(
 				$left => $r,
 				$right => $r + 1
@@ -314,9 +275,9 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param \lithium\data\Entity $entity updated tree element
 	 */
 	private static function updateNode($self, $entity) {
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 
-		$newParent = static::getById($self, $entity->data($parent));
+		$newParent = self::getById($self, $entity->data($parent));
 
 		$span = $entity->data($right) - $entity->data($left);
 		$spanToZero = $entity->data($right);
@@ -325,17 +286,17 @@ class Tree extends \lithium\core\StaticObject {
 		$shiftX = 0;
 		$shiftY = $span + 1;
 
-		static::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
+		self::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
 		if($entity->data($right) < $newParent->data($right)){
 			$rangeY = array('floor' => $entity->data($right) + 1,'ceiling' => $newParent->data($right) - 1);
-			static::updateNodesIndicesBetween($self, $rangeY, '-', $shiftY);
+			self::updateNodesIndicesBetween($self, $rangeY, '-', $shiftY);
 			$shiftX = $newParent->data($right) - $entity->data($right) -1;
 		}else{
 			$rangeY = array('floor' => $newParent->data($right),'ceiling' => $entity->data($left) - 1);
-			static::updateNodesIndicesBetween($self, $rangeY, '+', $shiftY);
+			self::updateNodesIndicesBetween($self, $rangeY, '+', $shiftY);
 			$shiftX = ($newParent->data($right)-1) - $entity->data($left) + 1;
 		}
-		static::updateNodesIndicesBetween($self, array('floor'=> (0 - $span),'ceiling'=> 0), '+',$spanToZero+$shiftX);
+		self::updateNodesIndicesBetween($self, array('floor'=> (0 - $span),'ceiling'=> 0), '+',$spanToZero+$shiftX);
 		$entity->set(array($left => $entity->data($left) + $shiftX, $right=>$entity->data($right)+$shiftX));
 	}
 
@@ -348,7 +309,7 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param \lithium\data\Entity $entity updated tree element
 	 */
 	private static function deleteFromTree($self, $entity) {
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 		$span = 1;
 		if ($entity->data($right) - $entity->data($left) != 1) {
 			$span = $entity->data($right) - $entity->data($left);
@@ -357,7 +318,7 @@ class Tree extends \lithium\core\StaticObject {
 			$sql .= 'WHERE ' . $parent . ' = ' . $entity->data($self::meta('key'));
 			$connection->read($sql, array('return' => 'resource'));
 		}
-		static::updateNodesIndices($self, $entity->data($right), '-', $span + 1);
+		self::updateNodesIndices($self, $entity->data($right), '-', $span + 1);
 	}
 
 	/**
@@ -383,7 +344,7 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param Integer $span value to be added/subtracted (defaults to 2)
 	 */
 	private static function updateNodesIndices($self, $rght, $dir = '+', $span=2) {
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 		$connection = $self::connection();
 
 		$sql = 'UPDATE ' . $self::meta('source') . ' set ' . $right . ' = ' . $right . $dir . $span . ' ';
@@ -406,7 +367,7 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param Integer $span value to be added/subtracted (defaults to 2)
 	 */
 	private static function updateNodesIndicesBetween($self, $range, $dir = '+', $span=2) {
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 		$connection = $self::connection();
 
 		$sql = 'UPDATE ' . $self::meta('source') . ' set ' . $right . '=' . $right . $dir . $span . ' ';
@@ -427,7 +388,7 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param \lithium\data\Entity $node the node to move down;
 	 */
 	private static function moveDown($self,$node){
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 		$next = $self::find('first',array('conditions'=>array($parent => $node->data($parent),$left => $node->data($right)+1)));
 		if($next != null){
 
@@ -454,20 +415,20 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param \lithium\data\Entity $node the node to move down;
 	 */
 	private static function moveUp($self,$node){
-		extract(static::$_tree_config[$self]);
-		$prev = $self::find('first',array('conditions'=>array($parent => $node->data($parent),$right => $node->data($left)-1)));
+		extract(static::$_configurations[$self]);
+		$prev = $self::find('first', array('conditions' => array($parent => $node->data($parent), $right => $node->data($left) - 1)));
 		if($prev != null){
 			$spanToZero = $node->data($right);
-			$rangeX = array('floor'=>$node->data($left),'ceiling'=>$node->data($right));
+			$rangeX = array('floor' => $node->data($left), 'ceiling' => $node->data($right));
 			$shiftX = ($prev->data($right) - $prev->data($left)) + 1;
-			$rangeY = array('floor'=>$prev->data($left),'ceiling'=>$prev->data($right));
+			$rangeY = array('floor' => $prev->data($left),'ceiling' => $prev->data($right));
 			$shiftY = ($node->data($right) - $node->data($left)) + 1;
 
-			static::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
-			static::updateNodesIndicesBetween($self, $rangeY, '+', $shiftY);
-			static::updateNodesIndicesBetween($self, array('floor'=> (0 - $shiftY),'ceiling'=> 0), '+',$spanToZero-$shiftX);
+			self::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
+			self::updateNodesIndicesBetween($self, $rangeY, '+', $shiftY);
+			self::updateNodesIndicesBetween($self, array('floor' => (0 - $shiftY),'ceiling' => 0), '+', $spanToZero-$shiftX);
 
-			$node->set(array($left=>$node->data($left)-$shiftX, $right=>$node->data($right)-$shiftX));
+			$node->set(array($left => $node->data($left) - $shiftX, $right => $node->data($right) - $shiftX));
 		}
 	}
 
@@ -479,10 +440,10 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param \lithium\data\Model $self the model using this behavior
 	 */
 	private static function getMax($self) {
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 		$connection = $self::connection();
 		$sql = 'SELECT max(' . $right . ') as max ';
-		$sql .= 'FROM ' . $self::meta('source') . ';';
+		$sql .= 'FROM ' . $self::meta('source');
 		$max = $connection->read($sql);
 		if (sizeof($max) == 1) {
 			return $max[0]['max'];
@@ -500,29 +461,29 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param Integer $childrenCount number of Children of $id's parent (performance parameter to avoid double select ;))
 	 */
 	private static function getPosition($self,$id,$childrenCount = false){
-		extract(static::$_tree_config[$self]);
+		extract(static::$_configurations[$self]);
 
-		$node = static::getById($self, $id);
-		$parentNode = static::getById($self, $node->data($parent));
+		$node = self::getById($self, $id);
+		$parentNode = self::getById($self, $node->data($parent));
 
 		//fast decisions based on nested set maths
-		if($node->data($left) == ($parentNode->data($left)+1)){
+		if($node->data($left) == ($parentNode->data($left) + 1)){
 			return 0;
 		}
 
 		if(($node->data($right) + 1) == $parentNode->data($right)){
 			if($childrenCount === false){
-				$childrenCount = static::countChildren($node->data($parent),false);
+				$childrenCount = self::countChildren($node->data($parent), false);
 			}
 			return $childrenCount - 1;
 		}
 
 		//still here? now the shit hits the fan...
 		$count = 0;
-		$children = static::getChildren($node->data($parent),false);
+		$children = self::getChildren($node->data($parent), false);
 
 		foreach($children as $child){
-			if($child->data($self::meta('key'))==$id){
+			if($child->data($self::meta('key')) == $id){
 				return $count;
 			}
 			$count++;
