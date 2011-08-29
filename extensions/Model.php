@@ -198,6 +198,10 @@ class Model extends \lithium\data\Model {
 	 * @access public
 	 */
 	public static function beforeSave($self, $params) {
+		if ($params['data']) {
+			$params['entity']->set($params['data']);
+			$params['data'] = array();
+		}
 		extract(static::$_tree_config[$self]);
 		$entity = $params['entity'];
 		if (!$entity->data('id')) {
@@ -216,7 +220,7 @@ class Model extends \lithium\data\Model {
 			}
 
 			$oldNode = static::getById($self, $entity->data($self::meta('key')));
-			if($oldNode->data($parent)==$entity->data($parent)){
+			if($oldNode->data($parent) == $entity->data($parent)){
 				return true;
 			}
 
