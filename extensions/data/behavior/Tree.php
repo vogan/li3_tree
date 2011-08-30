@@ -22,7 +22,7 @@ class Tree extends \lithium\core\StaticObject {
 	 */
 	protected static $_configurations = array();
 
-/**
+	/**
 	 * Beahvior init setup
 	 *
 	 * @param object $class
@@ -35,21 +35,19 @@ class Tree extends \lithium\core\StaticObject {
 		);
 		$config += $defaults;
 
-		//set updated filter
-			$class::applyFilter('save', function($self, $params, $chain) use ($class) {
-				if ($params['data']) {
-					$params['entity']->set($params['data']);
-					$params['data'] = array();
-				}
-				Tree::invokeMethod('_beforeSave', array($class, $params));
-				return $chain->next($self, $params, $chain);
-			});
+		$class::applyFilter('save', function($self, $params, $chain) use ($class) {
+			if ($params['data']) {
+				$params['entity']->set($params['data']);
+				$params['data'] = array();
+			}
+			Tree::invokeMethod('_beforeSave', array($class, $params));
+			return $chain->next($self, $params, $chain);
+		});
 
-
-			$class::applyFilter('delete', function($self, $params, $chain) use ($class) {
-				Tree::invokeMethod('_beforeDelete', array($class, $params));
-				return $chain->next($self, $params, $chain);
-			});
+		$class::applyFilter('delete', function($self, $params, $chain) use ($class) {
+			Tree::invokeMethod('_beforeDelete', array($class, $params));
+			return $chain->next($self, $params, $chain);
+		});
 
 		return static::$_configurations[$class] = $config;
 	}
@@ -157,13 +155,13 @@ class Tree extends \lithium\core\StaticObject {
 
 		$entity = $self::find('first', array('conditions' => array($self::meta('key') => $id)));
 
-		// -- correct the level -> parent
+		// correct the level -> parent
 		if($newParent !== null && $newParent != $entity->data($parent)){
 			$entity->set(array($parent=>$newParent));
 			$entity->save();
 		}
 
-		// -- reordering
+		// reordering
 		$childrenCount = self::countChildren($entity->data($parent), false);
 		$position = self::getPosition($self, $id, $childrenCount);
 		if($position !== false){
@@ -178,7 +176,7 @@ class Tree extends \lithium\core\StaticObject {
 				$count *= -1;
 			}
 
-			for($i=0;$i<$count;$i++){
+			for($i=0; $i<$count; $i++){
 				if($position < $newPosition){
 					self::moveDown($self, $entity);
 				}else{
@@ -371,12 +369,12 @@ class Tree extends \lithium\core\StaticObject {
 		extract(static::$_configurations[$self]);
 		$connection = $self::connection();
 
-		$sql = 'UPDATE ' . $self::meta('source') . ' set ' . $right . '=' . $right . $dir . $span . ' ';
-		$sql .= 'WHERE ' . $right . ' between ' . $range['floor'] . ' and ' . $range['ceiling'];
+		$sql = 'UPDATE ' . $self::meta('source') . ' SET ' . $right . '=' . $right . $dir . $span . ' ';
+		$sql .= 'WHERE ' . $right . ' BETWEEN ' . $range['floor'] . ' AND ' . $range['ceiling'];
 		$connection->read($sql, array('return' => 'resource'));
 
-		$sql = 'UPDATE ' . $self::meta('source') . ' set ' . $left . ' = ' . $left . $dir . $span . ' ';
-		$sql .= 'WHERE ' . $left . ' between ' . ($range['floor']) . ' and ' . $range['ceiling'];
+		$sql = 'UPDATE ' . $self::meta('source') . ' SET ' . $left . ' = ' . $left . $dir . $span . ' ';
+		$sql .= 'WHERE ' . $left . ' BETWEEN ' . ($range['floor']) . ' AND ' . $range['ceiling'];
 		$connection->read($sql, array('return' => 'resource'));
 	}
 
@@ -388,22 +386,27 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param \lithium\data\Model $self the model using this behavior
 	 * @param \lithium\data\Entity $node the node to move down;
 	 */
-	private static function moveDown($self,$node){
+	private static function moveDown($self, $node){
 		extract(static::$_configurations[$self]);
-		$next = $self::find('first',array('conditions'=>array($parent => $node->data($parent),$left => $node->data($right)+1)));
+		$next = $self::find('first',array(
+			'conditions' => array($parent => $node->data($parent), $left => $node->data($right) + 1)
+		));
 		if($next != null){
 
 			$spanToZero = $node->data($right);
-			$rangeX = array('floor'=>$node->data($left),'ceiling'=>$node->data($right));
+			$rangeX = array('floor' => $node->data($left), 'ceiling' => $node->data($right));
 			$shiftX = ($next->data($right) - $next->data($left)) + 1;
-			$rangeY = array('floor'=>$next->data($left),'ceiling'=>$next->data($right));
+			$rangeY = array('floor' => $next->data($left), 'ceiling' => $next->data($right));
 			$shiftY = ($node->data($right) - $node->data($left)) + 1;
 
 			static::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
 			static::updateNodesIndicesBetween($self, $rangeY, '-', $shiftY);
-			static::updateNodesIndicesBetween($self, array('floor'=> (0 - $shiftY),'ceiling'=> 0), '+',$spanToZero+$shiftX);
+			static::updateNodesIndicesBetween($self, array('floor' => (0 - $shiftY), 'ceiling' => 0), '+', $spanToZero + $shiftX);
 
-			$node->set(array($left=>$node->data($left)+$shiftX, $right=>$node->data($right)+$shiftX));
+			$node->set(array(
+				$left => $node->data($left) + $shiftX,
+				$right => $node->data($right) + $shiftX
+			));
 		}
 	}
 
@@ -415,9 +418,11 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param \lithium\data\Model $self the model using this behavior
 	 * @param \lithium\data\Entity $node the node to move down;
 	 */
-	private static function moveUp($self,$node){
+	private static function moveUp($self, $node){
 		extract(static::$_configurations[$self]);
-		$prev = $self::find('first', array('conditions' => array($parent => $node->data($parent), $right => $node->data($left) - 1)));
+		$prev = $self::find('first', array(
+			'conditions' => array($parent => $node->data($parent), $right => $node->data($left) - 1)
+		));
 		if($prev != null){
 			$spanToZero = $node->data($right);
 			$rangeX = array('floor' => $node->data($left), 'ceiling' => $node->data($right));
@@ -427,9 +432,12 @@ class Tree extends \lithium\core\StaticObject {
 
 			self::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
 			self::updateNodesIndicesBetween($self, $rangeY, '+', $shiftY);
-			self::updateNodesIndicesBetween($self, array('floor' => (0 - $shiftY),'ceiling' => 0), '+', $spanToZero-$shiftX);
+			self::updateNodesIndicesBetween($self, array('floor' => (0 - $shiftY), 'ceiling' => 0), '+', $spanToZero - $shiftX);
 
-			$node->set(array($left => $node->data($left) - $shiftX, $right => $node->data($right) - $shiftX));
+			$node->set(array(
+				$left => $node->data($left) - $shiftX,
+				$right => $node->data($right) - $shiftX
+			));
 		}
 	}
 
@@ -443,7 +451,7 @@ class Tree extends \lithium\core\StaticObject {
 	private static function getMax($self) {
 		extract(static::$_configurations[$self]);
 		$connection = $self::connection();
-		$sql = 'SELECT max(' . $right . ') as max ';
+		$sql = 'SELECT MAX(' . $right . ') AS max ';
 		$sql .= 'FROM ' . $self::meta('source');
 		$max = $connection->read($sql);
 		if (sizeof($max) == 1) {
@@ -461,7 +469,7 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param Integer $id the id of the node the get the position from
 	 * @param Integer $childrenCount number of Children of $id's parent (performance parameter to avoid double select ;))
 	 */
-	private static function getPosition($self,$id,$childrenCount = false){
+	private static function getPosition($self, $id, $childrenCount = false){
 		extract(static::$_configurations[$self]);
 
 		$node = self::getById($self, $id);
