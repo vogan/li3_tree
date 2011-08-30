@@ -287,15 +287,15 @@ class Tree extends \lithium\core\StaticObject {
 
 		self::updateNodesIndicesBetween($self, $rangeX, '-', $spanToZero);
 		if($entity->data($right) < $newParent->data($right)){
-			$rangeY = array('floor' => $entity->data($right) + 1,'ceiling' => $newParent->data($right) - 1);
+			$rangeY = array('floor' => $entity->data($right) + 1, 'ceiling' => $newParent->data($right) - 1);
 			self::updateNodesIndicesBetween($self, $rangeY, '-', $shiftY);
 			$shiftX = $newParent->data($right) - $entity->data($right) -1;
 		}else{
-			$rangeY = array('floor' => $newParent->data($right),'ceiling' => $entity->data($left) - 1);
+			$rangeY = array('floor' => $newParent->data($right), 'ceiling' => $entity->data($left) - 1);
 			self::updateNodesIndicesBetween($self, $rangeY, '+', $shiftY);
 			$shiftX = ($newParent->data($right)-1) - $entity->data($left) + 1;
 		}
-		self::updateNodesIndicesBetween($self, array('floor'=> (0 - $span),'ceiling'=> 0), '+',$spanToZero+$shiftX);
+		self::updateNodesIndicesBetween($self, array('floor'=> (0 - $span),'ceiling'=> 0), '+', $spanToZero + $shiftX);
 		$entity->set(array($left => $entity->data($left) + $shiftX, $right=>$entity->data($right)+$shiftX));
 	}
 
@@ -342,15 +342,15 @@ class Tree extends \lithium\core\StaticObject {
 	 * @param String $dir Direction +/- (defaults to +)
 	 * @param Integer $span value to be added/subtracted (defaults to 2)
 	 */
-	private static function updateNodesIndices($self, $rght, $dir = '+', $span=2) {
+	private static function updateNodesIndices($self, $rght, $dir = '+', $span = 2) {
 		extract(static::$_configurations[$self]);
 		$connection = $self::connection();
 
-		$sql = 'UPDATE ' . $self::meta('source') . ' set ' . $right . ' = ' . $right . $dir . $span . ' ';
+		$sql = 'UPDATE ' . $self::meta('source') . ' SET ' . $right . ' = ' . $right . $dir . $span . ' ';
 		$sql .= 'WHERE ' . $right . ' >= ' . $rght;
 		$connection->read($sql, array('return' => 'resource'));
 
-		$sql = 'UPDATE ' . $self::meta('source') . ' set ' . $left . ' = ' . $left . $dir . $span . ' ';
+		$sql = 'UPDATE ' . $self::meta('source') . ' SET ' . $left . ' = ' . $left . $dir . $span . ' ';
 		$sql .= 'WHERE ' . $left . ' > ' . $rght;
 		$connection->read($sql, array('return' => 'resource'));
 	}
