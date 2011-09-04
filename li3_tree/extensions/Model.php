@@ -1,5 +1,4 @@
 <?php
-
 namespace li3_tree\extensions;
 
 /**
@@ -8,10 +7,6 @@ namespace li3_tree\extensions;
  * Implements a full Nested Tree Set Behaviour for li3. Provide at least a table with an PK, left, right and parent integer fields
  * to use this model. Its not recommended to name DB Colums 'left' and 'right' as these are reserved sql words. Apply the Behaviour in
  * your Models __init() Method.
- *
- * If you want to use this model with jsTree (www.jstree.com) configure 'jstree' to true. This enables you to directly use the
- * new position given by the script without changing the value. (jstree calculates the target position with the fact that the old node
- * remains in tree)
  *
  * @author: vogan
  */
@@ -42,13 +37,13 @@ class Model extends \lithium\data\Model {
 		static::$_tree_config[$self] = array_merge(static::$_tree_defaults, $config);
 
 		static::applyFilter('save', function($self, $params, $chain) {
-			if ($self::_beforeSave($self, $params)) {
+			if ($self::beforeSave($self, $params)) {
 				return $chain->next($self, $params, $chain);
 			}
 		});
 
 		static::applyFilter('delete', function($self, $params, $chain) {
-			if ($self::_beforeDelete($self, $params)) {
+			if ($self::beforeDelete($self, $params)) {
 				return $chain->next($self, $params, $chain);
 			}
 		});
@@ -79,9 +74,8 @@ class Model extends \lithium\data\Model {
 				'conditions' => array(
 					$left => array('>' => $node->data($left)),
 					$right => array('<' => $node->data($right)),
-					$parent => $node->data($parent)
-				)
-			));
+					$parent => $node->data($self::meta('key'))
+			)));
 			return $count;
 		}
 	}
@@ -150,8 +144,9 @@ class Model extends \lithium\data\Model {
 	 * @param Integer id the id of the node to move
 	 * @param Integer position new position of node in same level, starting with 0
 	 * @param Integer newParent id of new parent (provide old parent id if no change)
+     * @param Boolean jsTree if move operation should be done with jsTree position fix
 	 */
-	public static function move($id, $newPosition, $newParent = null){
+	public static function move($id, $newPosition, $newParent = null, $jsTree = false){
 		$self = get_called_class();
 		extract(static::$_tree_config[$self]);
 		 
@@ -189,14 +184,14 @@ class Model extends \lithium\data\Model {
 	}
 
 	/**
-	 * _beforeSave
+	 * beforeSave
 	 *
 	 * this method is called befor each save
 	 *
 	 * @param \lithium\data\Model $self
 	 * @param Array $params
 	 */
-	private static function _beforeSave($self, $params) {
+	public static function beforeSave($self, $params) {
 		extract(static::$_tree_config[$self]);
 		$entity = $params['entity'];
 		if (!$entity->data('id')) {
@@ -225,14 +220,14 @@ class Model extends \lithium\data\Model {
 	}
 
 	/**
-	 * _beforeDelete
+	 * beforeDelete
 	 *
 	 * this method is called befor each save
 	 *
 	 * @param \lithium\data\Model $self
 	 * @param Array $params
 	 */
-	private static function _beforeDelete($self, $params) {
+	public static function beforeDelete($self, $params) {
 		static::deleteFromTree($self, $params['entity']);
 		return true;
 	}
